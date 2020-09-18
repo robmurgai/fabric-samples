@@ -11,11 +11,33 @@ function print() {
 	echo -e "${GREEN}${1}${NC}"
 }
 
-print "Creating network"
-./network.sh up createChannel -ca -s couchdb -i "${FABRIC_VERSION}"
+function createNetwork() {
+  print "Creating network"
+  ./network.sh up createChannel -ca -s couchdb -i "${FABRIC_VERSION}"
+  print "Deploying ${CHAINCODE_NAME} chaincode"
+  ./network.sh deployCC -ccn "${CHAINCODE_NAME}" -ccv 1 -ccs 1 -ccl "${CHAINCODE_LANGUAGE}"
+}
 
-print "Deploying ${CHAINCODE_NAME} chaincode"
-./network.sh deployCC -ccn "${CHAINCODE_NAME}" -ccv 1 -ccs 1 -ccl "${CHAINCODE_LANGUAGE}"
+function stopNetwork() {
+  print "Stopping network"
+  ./network.sh down
+}
 
-print "Stopping network"
-./network.sh down
+# Run Java application
+createNetwork
+print "Initializing Java application"
+pushd ../asset-transfer-ledger-queries/application-java
+print "Executing Gradle Run"
+gradle run
+popd
+stopNetwork
+
+# Run Javascript application
+createNetwork
+print "Initializing Javascript application"
+pushd ../asset-transfer-ledger-queries/application-javascript
+npm install
+print "Executing app.js"
+node app.js
+popd
+stopNetwork

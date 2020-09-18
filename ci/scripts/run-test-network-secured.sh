@@ -11,11 +11,26 @@ function print() {
 	echo -e "${GREEN}${1}${NC}"
 }
 
-print "Creating network"
-./network.sh up createChannel -ca -s couchdb -i "${FABRIC_VERSION}"
+function createNetwork() {
+  print "Creating network"
+  ./network.sh up createChannel -ca
+  print "Deploying ${CHAINCODE_NAME} chaincode"
+  ./network.sh deployCC -ccn "${CHAINCODE_NAME}" -ccl "${CHAINCODE_LANGUAGE}" -ccep "OR('Org1MSP.peer','Org2MSP.peer')"
+}
 
-print "Deploying ${CHAINCODE_NAME} chaincode"
-./network.sh deployCC -ccn "${CHAINCODE_NAME}" -ccv 1 -ccs 1 -ccl "${CHAINCODE_LANGUAGE}"
+function stopNetwork() {
+  print "Stopping network"
+  ./network.sh down
+}
 
-print "Stopping network"
-./network.sh down
+# Run Javascript application
+createNetwork
+print "Initializing Javascript application"
+pushd ../asset-transfer-secured-agreement/application-javascript
+npm install
+print "Executing app.js"
+node app.js
+popd
+stopNetwork
+print "Remove wallet storage"
+rm -R ../asset-transfer-secured-agreement/application-javascript/wallet
