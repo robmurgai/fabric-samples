@@ -30,12 +30,20 @@ func main() {
 		log.Fatalf("Failed to create wallet: %v", err)
 	}
 
+	//Rob Added for Debug
+	something, _ := wallet.List()
+	log.Printf("Rob-Debug: wallet declared as: %v\n", something)
+
 	if !wallet.Exists("appUser") {
 		err = populateWallet(wallet)
 		if err != nil {
 			log.Fatalf("Failed to populate wallet contents: %v", err)
 		}
 	}
+
+	//Rob Added for Debug
+	something, _ = wallet.List()
+	log.Printf("Rob-Debug: wallet updated with appUser creds as: %v\n", something)
 
 	ccpPath := filepath.Join(
 		"..",
@@ -56,12 +64,20 @@ func main() {
 	}
 	defer gw.Close()
 
+	//Rob Added for Debug
+	log.Printf("Rob-Debug: Gateway gw declared \n")
+
 	network, err := gw.GetNetwork("mychannel")
 	if err != nil {
 		log.Fatalf("Failed to get network: %v", err)
 	}
 
+	//Rob Added for Debug
+	log.Printf("Rob-Debug: network declared as: %v\n", network.Name())
+
 	contract := network.GetContract("basic")
+	//Rob Added for Debug
+	log.Printf("Rob-Debug: Contract Declared as: %v\n", contract.Name())
 
 	result, err := contract.SubmitTransaction("InitLedger")
 	if err != nil {
