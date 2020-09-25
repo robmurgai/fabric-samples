@@ -7,23 +7,49 @@ SPDX-License-Identifier: Apache-2.0
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
 	"github.com/hyperledger/fabric-sdk-go/pkg/gateway"
 )
 
 func main() {
+
 	log.Println("============ application-golang starts ============")
 
-	err := os.Setenv("DISCOVERY_AS_LOCALHOST", "true")
+	// log.Printf("\nRob-Debug: Environemnt Vars total: %v\n", len(os.Environ()))
+	// for _, envs := range os.Environ() {
+	// 	log.Printf("\nRob-Debug: Environemnt Var is: %v\n", envs)
+	// }
+
+	hfcset := "{\"debug\":\"console\"}"
+	err := os.Setenv("HFC_LOGGING", hfcset)
+	if err != nil {
+		log.Fatalf("Error setting HFC_LOGGING environemnt variable: %v", err)
+	}
+
+	err = os.Setenv("DISCOVERY_AS_LOCALHOST", "true")
 	if err != nil {
 		log.Fatalf("Error setting DISCOVERY_AS_LOCALHOST environemnt variable: %v", err)
 	}
+
+	// key := "localhostEnvVarName"
+	// val, ok := os.LookupEnv(key)
+	// if !ok {
+	// 	fmt.Printf("Rob-Debug: %s not set\n", key)
+	// 	fmt.Printf("Rob-Debug: Setting %s to true\n", key)
+	// 	os.Setenv(key, "true")
+	// } else {
+	// 	fmt.Printf("Rob-Debug: %s=%s\n", key, val)
+	// }
 
 	wallet, err := gateway.NewFileSystemWallet("wallet")
 	if err != nil {
@@ -82,6 +108,26 @@ func main() {
 	log.Println("--> Submit Transaction: InitLedger, function creates the initial set of assets on the ledger")
 	result, err := contract.SubmitTransaction("InitLedger")
 	if err != nil {
+		cli, err1 := client.NewEnvClient()
+		if err1 != nil {
+			panic(err1)
+		}
+		containers, err1 := cli.ContainerList(context.Background(), types.ContainerListOptions{})
+		if err1 != nil {
+			panic(err1)
+		}
+		for _, container := range containers {
+			if strings.Contains(container.Image, "orderer") {
+				fmt.Printf(" %-23s %v\n", "Name", "IMAGE")
+				fmt.Printf(" %s  %v\n", container.Names, container.Image)
+				fmt.Printf(" %-23s %v\n", "Name", "ID")
+				fmt.Printf(" %s  %v\n", container.Names, container.ID)
+				fmt.Printf(" %-23s %v\n", "Name", "Network Settings")
+				fmt.Printf(" %s  %v\n", container.Names, container.NetworkSettings)
+				fmt.Printf(" %-23s %v\n", "Name", "Ports")
+				fmt.Printf(" %s  %v\n", container.Names, container.Ports)
+			}
+		}
 		log.Fatalf("Failed to Submit transaction: %v", err)
 	}
 	log.Println(string(result))
