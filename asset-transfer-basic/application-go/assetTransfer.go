@@ -55,7 +55,7 @@ var appUserCredPath = filepath.Join(
  *   -- How to submit a transaction
  *   -- How to query and check the results
  *
- * To see the SDK workings
+ * To see details of the GO SDK, Run the SDK in DEBUG mode.
  * Uncomment setLogLevel("DEBUG")
  */
 func main() {
@@ -85,7 +85,7 @@ func main() {
 	something, _ := wallet.List()
 	fmt.Printf("AssetTransfer: Wallet Updated for User: %v\n", something)
 
-	// Create a new gateway instance for interacting with the fabric network.
+	// Create a new gateway instance to interact with the fabric network.
 	gw, err := gateway.Connect(
 		gateway.WithConfig(config.FromFile(filepath.Clean(ccpPath))),
 		gateway.WithIdentity(wallet, org1UserID),
@@ -109,7 +109,6 @@ func main() {
 	log.Println("--> Submit Transaction: InitLedger, function creates the initial set of assets on the ledger")
 	result, err := contract.SubmitTransaction("InitLedger")
 	if err != nil {
-		// printContainers("orderer")
 		log.Fatalf("Failed to Submit transaction: %v", err)
 	}
 
@@ -121,13 +120,14 @@ func main() {
 	printResultString(result)
 
 	log.Println("--> Submit Transaction: CreateAsset, creates new asset with ID, color, owner, size, and appraisedValue arguments")
+	log.Println("--> Submit Transaction: CreateAsset, ID: asset13, color: yellow, size: 5, owner: Tom, appraisalValue: 1300")
 	result, err = contract.SubmitTransaction("CreateAsset", "asset13", "yellow", "5", "Tom", "1300")
 	if err != nil {
 		log.Printf("Failed to Submit transaction: %v", err)
 	}
-	// printResultString(result)
 
 	log.Println("--> Evaluate Transaction: ReadAsset, function returns an asset with a given assetID")
+	log.Println("--> Evaluate Transaction: ReadAsset, asset13")
 	result, err = contract.EvaluateTransaction("ReadAsset", "asset13")
 	if err != nil {
 		log.Fatalf("Failed to evaluate transaction: %v\n", err)
@@ -135,19 +135,21 @@ func main() {
 	printResultString(result)
 
 	log.Println("--> Evaluate Transaction: AssetExists, function returns 'true' if an asset with given assetID exist")
-	result, err = contract.EvaluateTransaction("AssetExists", "asset1")
+	log.Println("--> Evaluate Transaction: AssetExists, asset1")
 	if err != nil {
 		log.Fatalf("Failed to evaluate transaction: %v\n", err)
 	}
 	printResultString(result)
 
-	log.Println("--> Submit Transaction: TransferAsset asset1, transfer to new owner of Tom")
+	log.Println("--> Submit Transaction: TransferAsset Transfer asset to new owner")
+	log.Println("--> Submit Transaction: TransferAsset Transfer asset: asset1 to new owner: Tom")
 	_, err = contract.SubmitTransaction("TransferAsset", "asset1", "Tom")
 	if err != nil {
 		log.Fatalf("Failed to Submit transaction: %v", err)
 	}
 
-	log.Println("--> Evaluate Transaction: ReadAsset, function returns 'asset1' attributes")
+	log.Println("--> Evaluate Transaction: ReadAsset, function returns asset attributes")
+	log.Println("--> Evaluate Transaction: ReadAsset, 'asset1'")
 	result, err = contract.EvaluateTransaction("ReadAsset", "asset1")
 	if err != nil {
 		log.Fatalf("Failed to evaluate transaction: %v", err)
