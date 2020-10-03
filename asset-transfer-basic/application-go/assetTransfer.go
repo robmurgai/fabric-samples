@@ -7,158 +7,139 @@ SPDX-License-Identifier: Apache-2.0
 package main
 
 import (
-	"context"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
+	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
 	"github.com/hyperledger/fabric-sdk-go/pkg/gateway"
 )
 
+const (
+	channelName      = "mychannel"
+	chaincodeName    = "basic"
+	mspOrg1          = "Org1MSP"
+	org1UserID       = "appUser"
+	fileSystemWallet = "wallet"
+)
+
+var basePath = filepath.Join(
+	"..",
+	"..",
+	"test-network",
+	"organizations",
+	"peerOrganizations",
+	"org1.example.com",
+)
+
+// build an in memory object with the network configuration (also known as a connection profile)
+var ccpPath = filepath.Join(
+	basePath,
+	// "connection-org1.yaml", //Change this back to connection-org1.yaml once the Orderer Cert Info bug is fixed
+	"connection-org1-withOrdererInfo.yaml",
+)
+var appUserCredPath = filepath.Join(
+	basePath,
+	"users",
+	"User1@org1.example.com",
+	"msp",
+)
+
+/**
+ *  A test application to show basic queries operations with any of the asset-transfer-basic chaincodes
+ *   -- How to submit a transaction
+ *   -- How to query and check the results
+ *
+ * To see the SDK workings
+ * Uncomment setLogLevel("DEBUG")
+ */
 func main() {
 
 	log.Println("============ application-golang starts ============")
 
-	// log.Printf("\nRob-Debug: Environemnt Vars total: %v\n", len(os.Environ()))
-	// for _, envs := range os.Environ() {
-	// 	log.Printf("\nRob-Debug: Environemnt Var is: %v\n", envs)
-	// }
+	// Set the Required Env for Debugging
+	// setLogLevel("DEBUG")
 
-	hfcset := "{\"debug\":\"console\"}"
-	err := os.Setenv("HFC_LOGGING", hfcset)
-	if err != nil {
-		log.Fatalf("Error setting HFC_LOGGING environemnt variable: %v", err)
-	}
+	// Set Discovery as Local Host
+	setDiscoveryAsLocalhost()
 
-	err = os.Setenv("DISCOVERY_AS_LOCALHOST", "true")
-	if err != nil {
-		log.Fatalf("Error setting DISCOVERY_AS_LOCALHOST environemnt variable: %v", err)
-	}
-
-	// key := "localhostEnvVarName"
-	// val, ok := os.LookupEnv(key)
-	// if !ok {
-	// 	fmt.Printf("Rob-Debug: %s not set\n", key)
-	// 	fmt.Printf("Rob-Debug: Setting %s to true\n", key)
-	// 	os.Setenv(key, "true")
-	// } else {
-	// 	fmt.Printf("Rob-Debug: %s=%s\n", key, val)
-	// }
-
-	wallet, err := gateway.NewFileSystemWallet("wallet")
+	// setup the wallet to hold the credentials of the application user
+	wallet, err := gateway.NewFileSystemWallet(fileSystemWallet)
 	if err != nil {
 		log.Fatalf("Failed to create wallet: %v", err)
 	}
+	fmt.Printf("AssetTransfer: Wallet Created in Filesystem\n")
 
-	//Rob Added for Debug
-	something, _ := wallet.List()
-	log.Printf("Rob-Debug: wallet declared as: %v\n", something)
-
-	if !wallet.Exists("appUser") {
-		err = populateWallet(wallet)
+	// Enroll Application User
+	if !wallet.Exists(org1UserID) {
+		err = populateWallet(wallet, appUserCredPath, org1UserID)
 		if err != nil {
 			log.Fatalf("Failed to populate wallet contents: %v", err)
 		}
 	}
+	something, _ := wallet.List()
+	fmt.Printf("AssetTransfer: Wallet Updated for User: %v\n", something)
 
-	//Rob Added for Debug
-	something, _ = wallet.List()
-	log.Printf("Rob-Debug: wallet updated with appUser creds as: %v\n", something)
-
-	ccpPath := filepath.Join(
-		"..",
-		"..",
-		"test-network",
-		"organizations",
-		"peerOrganizations",
-		"org1.example.com",
-		"connection-org1.yaml",
-	)
-
+	// Create a new gateway instance for interacting with the fabric network.
 	gw, err := gateway.Connect(
 		gateway.WithConfig(config.FromFile(filepath.Clean(ccpPath))),
-		gateway.WithIdentity(wallet, "appUser"),
+		gateway.WithIdentity(wallet, org1UserID),
+		gateway.WithTimeout(100*time.Second),
 	)
 	if err != nil {
 		log.Fatalf("Failed to connect to gateway: %v", err)
 	}
 	defer gw.Close()
+	fmt.Printf("AssetTransfer: Gateway connected with identity: %v\n", org1UserID)
 
-	//Rob Added for Debug
-	log.Printf("Rob-Debug: Gateway gw declared \n")
-
-	network, err := gw.GetNetwork("mychannel")
+	network, err := gw.GetNetwork(channelName)
 	if err != nil {
 		log.Fatalf("Failed to get network: %v", err)
 	}
+	fmt.Printf("AssetTransfer: Network Declared as: %v\n", network.Name())
 
-	//Rob Added for Debug
-	log.Printf("Rob-Debug: network declared as: %v\n", network.Name())
-
-	contract := network.GetContract("basic")
-	//Rob Added for Debug
-	log.Printf("Rob-Debug: Contract Declared as: %v\n", contract.Name())
+	contract := network.GetContract(chaincodeName)
+	fmt.Printf("AssetTransfer: Contract Declared as: %v\n", contract.Name())
 
 	log.Println("--> Submit Transaction: InitLedger, function creates the initial set of assets on the ledger")
 	result, err := contract.SubmitTransaction("InitLedger")
 	if err != nil {
-		cli, err1 := client.NewEnvClient()
-		if err1 != nil {
-			panic(err1)
-		}
-		containers, err1 := cli.ContainerList(context.Background(), types.ContainerListOptions{})
-		if err1 != nil {
-			panic(err1)
-		}
-		for _, container := range containers {
-			if strings.Contains(container.Image, "orderer") {
-				fmt.Printf(" %-23s %v\n", "Name", "IMAGE")
-				fmt.Printf(" %s  %v\n", container.Names, container.Image)
-				fmt.Printf(" %-23s %v\n", "Name", "ID")
-				fmt.Printf(" %s  %v\n", container.Names, container.ID)
-				fmt.Printf(" %-23s %v\n", "Name", "Network Settings")
-				fmt.Printf(" %s  %v\n", container.Names, container.NetworkSettings)
-				fmt.Printf(" %-23s %v\n", "Name", "Ports")
-				fmt.Printf(" %s  %v\n", container.Names, container.Ports)
-			}
-		}
+		// printContainers("orderer")
 		log.Fatalf("Failed to Submit transaction: %v", err)
 	}
-	log.Println(string(result))
 
 	log.Println("--> Evaluate Transaction: GetAllAssets, function returns all the current assets on the ledger")
 	result, err = contract.EvaluateTransaction("GetAllAssets")
 	if err != nil {
 		log.Fatalf("Failed to evaluate transaction: %v", err)
 	}
-	log.Println(string(result))
+	printResultString(result)
 
 	log.Println("--> Submit Transaction: CreateAsset, creates new asset with ID, color, owner, size, and appraisedValue arguments")
 	result, err = contract.SubmitTransaction("CreateAsset", "asset13", "yellow", "5", "Tom", "1300")
 	if err != nil {
-		log.Fatalf("Failed to Submit transaction: %v", err)
+		log.Printf("Failed to Submit transaction: %v", err)
 	}
-	log.Println(string(result))
+	// printResultString(result)
 
 	log.Println("--> Evaluate Transaction: ReadAsset, function returns an asset with a given assetID")
 	result, err = contract.EvaluateTransaction("ReadAsset", "asset13")
 	if err != nil {
 		log.Fatalf("Failed to evaluate transaction: %v\n", err)
 	}
-	log.Println(string(result))
+	printResultString(result)
 
 	log.Println("--> Evaluate Transaction: AssetExists, function returns 'true' if an asset with given assetID exist")
 	result, err = contract.EvaluateTransaction("AssetExists", "asset1")
 	if err != nil {
 		log.Fatalf("Failed to evaluate transaction: %v\n", err)
 	}
-	log.Println(string(result))
+	printResultString(result)
 
 	log.Println("--> Submit Transaction: TransferAsset asset1, transfer to new owner of Tom")
 	_, err = contract.SubmitTransaction("TransferAsset", "asset1", "Tom")
@@ -171,25 +152,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to evaluate transaction: %v", err)
 	}
-	log.Println(string(result))
+	printResultString(result)
+
 	log.Println("============ application-golang ends ============")
 }
 
-func populateWallet(wallet *gateway.Wallet) error {
-	log.Println("============ Populating wallet ============")
-	credPath := filepath.Join(
-		"..",
-		"..",
-		"test-network",
-		"organizations",
-		"peerOrganizations",
-		"org1.example.com",
-		"users",
-		"User1@org1.example.com",
-		"msp",
-	)
+func populateWallet(wallet *gateway.Wallet, credPath string, user string) error {
 
 	certPath := filepath.Join(credPath, "signcerts", "cert.pem")
+
 	// read the certificate pem
 	cert, err := ioutil.ReadFile(filepath.Clean(certPath))
 	if err != nil {
@@ -213,5 +184,33 @@ func populateWallet(wallet *gateway.Wallet) error {
 
 	identity := gateway.NewX509Identity("Org1MSP", string(cert), string(key))
 
-	return wallet.Put("appUser", identity)
+	return wallet.Put(user, identity)
+}
+
+func setLogLevel(sdkLogLevel string) {
+
+	err := os.Setenv("FABRIC_SDK_CLIENT_LOGGING_LEVEL", sdkLogLevel)
+	if err != nil {
+		log.Fatalf("Error setting DISCOVERY_AS_LOCALHOST environemnt variable: %v", err)
+	}
+	fmt.Printf("AssetTransfer: Setting FABRIC_SDK_CLIENT_LOGGING_LEVEL to: %v\n", os.Getenv("FABRIC_SDK_CLIENT_LOGGING_LEVEL"))
+}
+
+func setDiscoveryAsLocalhost() {
+	err := os.Setenv("DISCOVERY_AS_LOCALHOST", "true")
+	if err != nil {
+		log.Fatalf("Error setting DISCOVERY_AS_LOCALHOST environemnt variable: %v", err)
+	}
+	fmt.Printf("AssetTransfer: Setting DISCOVERY_AS_LOCALHOST to: %v\n", os.Getenv("DISCOVERY_AS_LOCALHOST"))
+}
+
+func printResultString(result []byte) {
+	var prettyJSON bytes.Buffer
+	error := json.Indent(&prettyJSON, result, "", "  ")
+	if error != nil {
+		log.Println("AssetTransfer: Unable to Pretty Print JSON - parse error: ", error)
+		log.Println(string(result))
+	} else {
+		log.Println(string(prettyJSON.Bytes()))
+	}
 }
